@@ -1,0 +1,42 @@
+import datetime as dt
+import json
+import tkinter as tk
+import tkinter.font as tkfont
+from pathlib import Path
+
+import customtkinter as ctk
+
+DATA_FILE = Path.home() / ".homegreen.json"
+
+# One color per area of the home, reused everywhere so color carries meaning.
+PAL = dict(
+    bg="#EDF1EE", side="#15332D", side_active="#25524A", side_text="#D3E3DD",
+    card="#FFFFFF", ink="#1B2B27", muted="#6B7C77", line="#DCE4E0",
+    food="#4C9A6A", energy="#E0A21F", water="#3A86C8",
+    soon="#B7791F", bad="#C44536", neutral="#6B7C77",
+)
+
+
+RULES = {
+    "plastic bottle": ("Recycle", "Rinse it and put the cap back on."),
+    "glass jar": ("Recycle", "Rinse it. Lids can usually go in too."),
+    "aluminium can": ("Recycle", "Rinse it. No need to crush."),
+    "steel can": ("Recycle", "Rinse it and remove any paper label if easy."),
+    "cardboard box": ("Recycle", "Flatten it and keep it dry."),
+    "newspaper": ("Recycle", "Keep it dry and loose, not bagged."),
+    "paper bag": ("Recycle", "Remove any plastic handles."),
+    "milk carton": ("Recycle", "Rinse it and flatten it."),
+    "pizza box": ("Compost", "Tear off the greasy part. Recycle the clean lid."),
+    "plastic bag": ("Drop-off", "Take it to a shop collection point. It jams sorting machines."),
+    "bubble wrap": ("Landfill", "Reuse it first. It is rarely recycled."),
+    "styrofoam": ("Landfill", "Check for a local drop-off before binning."),
+    "coffee cup": ("Landfill", "The plastic lining stops most paper cups being recycled."),
+    "chip packet": ("Landfill", "Mixed materials can't be separated."),
+    "diaper": ("Landfill", "Bag it and bin it."),
+    "tissue": ("Compost", "Used tissues can go in compost if you have it."),
+    "tea bag": ("Compost", "Check that the bag itself is not plastic."),
+    "eggshell": ("Compost", "Crush them to help them break down."),
+    "fruit peel": ("Compost", "Citrus is fine in small amounts."),
+    "vegetable scraps": ("Compost", "Great for compost or a green bin."),
+    "coffee grounds": ("Compost", "Also good directly on garden soil."),
+    "battery": ("Drop-off", "Never bin it. Use a battery collection point."),
