@@ -1,0 +1,225 @@
+import datetime as dt
+import json
+import tkinter as tk
+import tkinter.font as tkfont
+from pathlib import Path
+
+import customtkinter as ctk
+
+DATA_FILE = Path.home() / ".homegreen.json"
+
+PAL = dict(
+    bg="#FFF5FA",
+    side="#D98CB3",
+    side_active="#C76A9A",
+    side_text="#FFF7FB",
+    card="#FFFFFF",
+    ink="#4A3040",
+    muted="#987D8C",
+    line="#F1DCE6",
+    food="#E58BA8",
+    energy="#E9B872",
+    water="#91BBDD",
+    soon="#D99A5C",
+    bad="#D86F7C",
+    neutral="#A88F9D",
+)
+
+
+RULES = {
+    "plastic bottle": ("Recycle", "Rinse it and put the cap back on."),
+    "glass jar": ("Recycle", "Rinse it. Lids can usually go in too."),
+    "aluminium can": ("Recycle", "Rinse it. No need to crush."),
+    "steel can": ("Recycle", "Rinse it and remove any paper label if easy."),
+    "cardboard box": ("Recycle", "Flatten it and keep it dry."),
+    "newspaper": ("Recycle", "Keep it dry and loose, not bagged."),
+    "paper bag": ("Recycle", "Remove any plastic handles."),
+    "milk carton": ("Recycle", "Rinse it and flatten it."),
+    "pizza box": ("Compost", "Tear off the greasy part. Recycle the clean lid."),
+    "plastic bag": ("Drop-off", "Take it to a shop collection point. It jams sorting machines."),
+    "bubble wrap": ("Landfill", "Reuse it first. It is rarely recycled."),
+    "styrofoam": ("Landfill", "Check for a local drop-off before binning."),
+    "coffee cup": ("Landfill", "The plastic lining stops most paper cups being recycled."),
+    "chip packet": ("Landfill", "Mixed materials can't be separated."),
+    "diaper": ("Landfill", "Bag it and bin it."),
+    "tissue": ("Compost", "Used tissues can go in compost if you have it."),
+    "tea bag": ("Compost", "Check that the bag itself is not plastic."),
+    "eggshell": ("Compost", "Crush them to help them break down."),
+    "fruit peel": ("Compost", "Citrus is fine in small amounts."),
+    "vegetable scraps": ("Compost", "Great for compost or a green bin."),
+    "coffee grounds": ("Compost", "Also good directly on garden soil."),
+    "battery": ("Drop-off", "Never bin it. Use a battery collection point."),
+    "light bulb": ("Drop-off", "Many shops and councils collect them."),
+    "old phone": ("Drop-off", "Use an electronics recycler or a trade-in."),
+    "cooking oil": ("Drop-off", "Let it cool, then take it in a sealed bottle."),
+    "paint": ("Drop-off", "Take it to a hazardous waste collection."),
+    "clothing": ("Drop-off", "Donate if wearable, textile bank if not."),
+}
+BIN_COLOR = {"Recycle": PAL["water"], "Compost": PAL["food"],
+             "Landfill": PAL["neutral"], "Drop-off": PAL["energy"]}
+
+FONT = "Helvetica"
+
+
+def pick_font():
+    have = set(tkfont.families())
+    for name in ("Poppins", "Segoe UI", "SF Pro Display", "Helvetica Neue",
+                 "Noto Sans", "DejaVu Sans"):
+        if name in have:
+            return name
+    return "Helvetica"
+
+
+def font(size, weight="normal"):
+    return ctk.CTkFont(family=FONT, size=size, weight=weight)
+
+
+def card(parent, **kw):
+    return ctk.CTkFrame(parent, fg_color=PAL["card"], corner_radius=16, **kw)
+
+
+def load():
+    base = {
+    "food": [],
+    "eaten": 0,
+    "wasted": 0,
+    "usage": [],
+    "goals": {
+        "food_target": 10
+    }
+}
+    try:
+        base.update(json.loads(DATA_FILE.read_text()))
+    except (OSError, ValueError):
+        pass
+    return base
+
+
+def save(data):
+    try:
+        DATA_FILE.write_text(json.dumps(data, indent=2))
+    except OSError:
+        pass
+
+
+def days_left(iso):
+    return (dt.date.fromisoformat(iso) - dt.date.today()).days
+
+
+def expiry_text(n):
+    if n < 0:
+        return f"Expired {-n} day{'s' if n != -1 else ''} ago", PAL["bad"]
+    if n == 0:
+        return "Expires today", PAL["bad"]
+    if n <= 3:
+        return f"{n} day{'s' if n > 1 else ''} left", PAL["soon"]
+    return f"{n} days left", PAL["muted"]
+
+
+class App(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        global FONT
+        FONT = pick_font()
+        ctk.set_appearance_mode("light")
+        self.title("Homegreen")
+        self.geometry("1040x700")
+        self.minsize(920, 620)
+        self.configure(fg_color=PAL["bg"])
+        self.data = load()
+        self.util_kind = "Electricity"
+        self.current = "Overview"
+
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        side = ctk.CTkFrame(self, fg_color=PAL["side"], corner_radius=0, width=220)
+        side.grid(row=0, column=0, sticky="ns")
+        side.grid_propagate(False)
+        ctk.CTkLabel(side, text="Homegreen", font=font(22, "bold"),
+                     text_color="#FFFFFF").pack(anchor="w", padx=24, pady=(32, 28))
+
+        self.pages = {
+            "Overview": self.build_overview,
+            "Kitchen": self.build_kitchen,
+            "Recycling": self.build_recycling,
+            "Energy and water": self.build_utilities,
+        }
+        self.nav = {}
+        for name in self.pages:
+            b = ctk.CTkButton(side, text=name, anchor="w", height=42, corner_radius=10,
+                              font=font(15), fg_color="transparent",
+                              hover_color=PAL["side_active"], text_color=PAL["side_text"],
+                              command=lambda n=name: self.show(n))
+            b.pack(fill="x", padx=14, pady=3)
+            self.nav[name] = b
+
+        self.main = ctk.CTkFrame(self, fg_color="transparent")
+        self.main.grid(row=0, column=1, sticky="nsew")
+        self.show("Overview")
+
+    
+    def show(self, name):
+        self.current = name
+        for n, b in self.nav.items():
+            b.configure(fg_color=PAL["side_active"] if n == name else "transparent",
+                        text_color="#FFFFFF" if n == name else PAL["side_text"])
+        for w in self.main.winfo_children():
+            w.destroy()
+        self.pages[name]()
+
+    def header(self, title, sub):
+        box = ctk.CTkFrame(self.main, fg_color="transparent")
+        box.pack(fill="x", padx=32, pady=(28, 12))
+        ctk.CTkLabel(box, text=title, font=font(28, "bold"),
+                     text_color=PAL["ink"]).pack(anchor="w")
+        ctk.CTkLabel(box, text=sub, font=font(14),
+                     text_color=PAL["muted"]).pack(anchor="w")
+
+    def stat(self, parent, col, label, value, note, color):
+        c = card(parent)
+        c.grid(row=0, column=col, sticky="nsew", padx=8)
+        ctk.CTkFrame(c, fg_color=color, height=6, corner_radius=3).pack(
+            fill="x", padx=20, pady=(18, 10))
+        ctk.CTkLabel(c, text=label, font=font(13), text_color=PAL["muted"]).pack(
+            anchor="w", padx=20)
+        ctk.CTkLabel(c, text=value, font=font(26, "bold"), text_color=PAL["ink"]).pack(
+            anchor="w", padx=20, pady=(2, 0))
+        ctk.CTkLabel(c, text=note, font=font(13), text_color=PAL["muted"],
+                     wraplength=210, justify="left").pack(
+            anchor="w", padx=20, pady=(2, 18))
+
+    def latest(self, kind):
+        month = dt.date.today().strftime("%Y-%m")
+        for r in self.data["usage"]:
+            if r["kind"] == kind and r["month"] == month:
+                return r["value"]
+        return None
+
+    def build_overview(self):
+        hour = dt.datetime.now().hour
+        greet = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
+        self.header(greet, "Here is where your home stands today.")
+
+        food = self.data["food"]
+        soon = [f for f in food if days_left(f["expires"]) <= 3]
+        done = self.data["eaten"] + self.data["wasted"]
+        rate = f"{round(100 * self.data['eaten'] / done)}%" if done else "None yet"
+        elec, water = self.latest("Electricity"), self.latest("Water")
+
+        target = self.data["goals"]["food_target"]
+        progress = self.data["eaten"]
+        goal_percent = min(progress / target, 1)
+        row = ctk.CTkFrame(self.main, fg_color="transparent")
+        
+        row.pack(fill="x", padx=24)
+        for i in range(3):
+            row.grid_columnconfigure(i, weight=1, uniform="s")
+        self.stat(row, 0, "Needs using soon", str(len(soon)),
+                  f"of {len(food)} items in your kitchen", PAL["food"])
+        self.stat(row, 1, "Food eaten, not thrown out", rate,
+                  f"{self.data['eaten']} eaten, {self.data['wasted']} tossed", PAL["food"])
+        self.stat(row, 2, "This month",
+                  f"{elec:g} kWh" if elec is not None else "No reading",
+                  f"Water: {water:g} L" if water is not None else "Add readings in Energy and water",
+                  PAL["energy"])
