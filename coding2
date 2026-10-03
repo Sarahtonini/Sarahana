@@ -1,0 +1,94 @@
+import datetime as dt
+import json
+import tkinter as tk
+import tkinter.font as tkfont
+from pathlib import Path
+
+import customtkinter as ctk
+
+DATA_FILE = Path.home() / ".homegreen.json"
+
+PAL = dict(
+    bg="#FFF5FA",
+    side="#D98CB3",
+    side_active="#C76A9A",
+    side_text="#FFF7FB",
+    card="#FFFFFF",
+    ink="#4A3040",
+    muted="#987D8C",
+    line="#F1DCE6",
+    food="#E58BA8",
+    energy="#E9B872",
+    water="#91BBDD",
+    soon="#D99A5C",
+    bad="#D86F7C",
+    neutral="#A88F9D",
+)
+
+
+RULES = {
+    "plastic bottle": ("Recycle", "Rinse it and put the cap back on."),
+    "glass jar": ("Recycle", "Rinse it. Lids can usually go in too."),
+    "aluminium can": ("Recycle", "Rinse it. No need to crush."),
+    "steel can": ("Recycle", "Rinse it and remove any paper label if easy."),
+    "cardboard box": ("Recycle", "Flatten it and keep it dry."),
+    "newspaper": ("Recycle", "Keep it dry and loose, not bagged."),
+    "paper bag": ("Recycle", "Remove any plastic handles."),
+    "milk carton": ("Recycle", "Rinse it and flatten it."),
+    "pizza box": ("Compost", "Tear off the greasy part. Recycle the clean lid."),
+    "plastic bag": ("Drop-off", "Take it to a shop collection point. It jams sorting machines."),
+    "bubble wrap": ("Landfill", "Reuse it first. It is rarely recycled."),
+    "styrofoam": ("Landfill", "Check for a local drop-off before binning."),
+    "coffee cup": ("Landfill", "The plastic lining stops most paper cups being recycled."),
+    "chip packet": ("Landfill", "Mixed materials can't be separated."),
+    "diaper": ("Landfill", "Bag it and bin it."),
+    "tissue": ("Compost", "Used tissues can go in compost if you have it."),
+    "tea bag": ("Compost", "Check that the bag itself is not plastic."),
+    "eggshell": ("Compost", "Crush them to help them break down."),
+    "fruit peel": ("Compost", "Citrus is fine in small amounts."),
+    "vegetable scraps": ("Compost", "Great for compost or a green bin."),
+    "coffee grounds": ("Compost", "Also good directly on garden soil."),
+    "battery": ("Drop-off", "Never bin it. Use a battery collection point."),
+    "light bulb": ("Drop-off", "Many shops and councils collect them."),
+    "old phone": ("Drop-off", "Use an electronics recycler or a trade-in."),
+    "cooking oil": ("Drop-off", "Let it cool, then take it in a sealed bottle."),
+    "paint": ("Drop-off", "Take it to a hazardous waste collection."),
+    "clothing": ("Drop-off", "Donate if wearable, textile bank if not."),
+}
+BIN_COLOR = {"Recycle": PAL["water"], "Compost": PAL["food"],
+             "Landfill": PAL["neutral"], "Drop-off": PAL["energy"]}
+
+FONT = "Helvetica"
+
+
+def pick_font():
+    have = set(tkfont.families())
+    for name in ("Poppins", "Segoe UI", "SF Pro Display", "Helvetica Neue",
+                 "Noto Sans", "DejaVu Sans"):
+        if name in have:
+            return name
+    return "Helvetica"
+
+
+def font(size, weight="normal"):
+    return ctk.CTkFont(family=FONT, size=size, weight=weight)
+
+
+def card(parent, **kw):
+    return ctk.CTkFrame(parent, fg_color=PAL["card"], corner_radius=16, **kw)
+
+
+def load():
+    base = {"food": [], "eaten": 0, "wasted": 0, "usage": []}
+    try:
+        base.update(json.loads(DATA_FILE.read_text()))
+    except (OSError, ValueError):
+        pass
+    return base
+
+
+def save(data):
+    try:
+        DATA_FILE.write_text(json.dumps(data, indent=2))
+    except OSError:
+        pass
