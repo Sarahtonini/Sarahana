@@ -8,7 +8,7 @@ import customtkinter as ctk
 
 DATA_FILE = Path.home() / ".homegreen.json"
 
-# One color per area of the home, reused everywhere so color carries meaning.
+
 PAL = dict(
     bg="#EDF1EE", side="#15332D", side_active="#25524A", side_text="#D3E3DD",
     card="#FFFFFF", ink="#1B2B27", muted="#6B7C77", line="#DCE4E0",
