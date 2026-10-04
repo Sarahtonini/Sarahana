@@ -1,0 +1,1355 @@
+import datetime as dt
+import json
+import tkinter as tk
+import tkinter.font as tkfont
+from pathlib import Path
+
+import customtkinter as ctk
+
+
+DATA_FILE = Path.home() / ".homegreen.json"
+
+
+
+PAL = dict(
+    bg="#FFF5FA",
+    side="#D98CB3",
+    side_active="#C76A9A",
+    side_text="#FFF7FB",
+    card="#FFFFFF",
+    ink="#4A3040",
+    muted="#987D8C",
+    line="#F1DCE6",
+
+    food="#E58BA8",
+    energy="#E9B872",
+    water="#91BBDD",
+    soon="#D99A5C",
+    bad="#D86F7C",
+    neutral="#A88F9D",
+)
+
+
+
+RULES = {
+    "paper": "Paper recycling",
+    "cardboard": "Paper recycling",
+    "newspaper": "Paper recycling",
+    "magazine": "Paper recycling",
+
+    "plastic bottle": "Plastic recycling",
+    "plastic": "Plastic recycling",
+    "bottle": "Plastic recycling",
+
+    "glass bottle": "Glass recycling",
+    "glass": "Glass recycling",
+    "jar": "Glass recycling",
+
+    "can": "Metal recycling",
+    "aluminium can": "Metal recycling",
+    "metal": "Metal recycling",
+
+    "food": "Food waste / compost",
+    "banana peel": "Food waste / compost",
+    "vegetable peel": "Food waste / compost",
+
+    "battery": "Special recycling / battery collection",
+
+    "clothes": "Textile donation / recycling",
+}
+
+
+BIN_COLOR = {
+    "Paper recycling": PAL["food"],
+    "Plastic recycling": PAL["water"],
+    "Glass recycling": PAL["neutral"],
+    "Metal recycling": PAL["energy"],
+    "Food waste / compost": PAL["food"],
+    "Special recycling / battery collection": PAL["bad"],
+    "Textile donation / recycling": PAL["side"],
+}
+
+
+
+FONT = "Helvetica"
+
+
+def pick_font():
+    
+
+    have = set(tkfont.families())
+
+    for name in (
+        "Avenir Next",
+        "Poppins",
+        "SF Pro Display",
+        "Helvetica Neue",
+        "Noto Sans",
+        "DejaVu Sans",
+    ):
+        if name in have:
+            return name
+
+    return "Helvetica"
+
+
+def font(size, weight="normal"):
+    return ctk.CTkFont(
+        family=FONT,
+        size=size,
+        weight=weight
+    )
+
+
+
+
+def load():
+    
+
+    base = {
+        "food": [],
+        "eaten": 0,
+        "wasted": 0,
+        "usage": [],
+        "goals": {
+            "food_target": 10
+        },
+        "eco_actions": []
+    }
+
+    try:
+        saved = json.loads(DATA_FILE.read_text())
+
+        base.update(saved)
+
+        if "goals" not in base:
+            base["goals"] = {}
+
+        if "food_target" not in base["goals"]:
+            base["goals"]["food_target"] = 10
+
+        if "eco_actions" not in base:
+            base["eco_actions"] = []
+
+        if "food" not in base:
+            base["food"] = []
+
+        if "usage" not in base:
+            base["usage"] = []
+
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+
+    return base
+
+
+def save(data):
+    try:
+        DATA_FILE.write_text(
+            json.dumps(data, indent=2)
+        )
+    except OSError:
+        pass
+
+
+def days_left(iso):
+    return (
+        dt.date.fromisoformat(iso) - dt.date.today()
+    ).days
+
+
+def expiry_text(n):
+    if n < 0:
+        return "Expired"
+    elif n == 0:
+        return "Expires today"
+    elif n == 1:
+        return "Expires tomorrow"
+    else:
+        return f"Expires in {n} days"
+
+
+
+def card(parent, **kw):
+    return ctk.CTkFrame(
+        parent,
+        fg_color=PAL["card"],
+        corner_radius=16,
+        **kw
+    )
+
+
+class App(ctk.CTk):
+
+    def __init__(self):
+        super().__init__()
+
+        global FONT
+
+        FONT = pick_font()
+
+        ctk.set_appearance_mode("light")
+
+        self.title("Greenie Beanie")
+        self.geometry("1040x700")
+        self.minsize(920, 620)
+
+        self.configure(
+            fg_color=PAL["bg"]
+        )
+
+        self.data = load()
+
+        self.util_kind = "Electricity"
+        self.current = "Overview"
+
+        self.grid_columnconfigure(
+            1,
+            weight=1
+        )
+
+        self.grid_rowconfigure(
+            0,
+            weight=1
+        )
+
+       
+        side = ctk.CTkFrame(
+            self,
+            fg_color=PAL["side"],
+            corner_radius=0,
+            width=220
+        )
+
+        side.grid(
+            row=0,
+            column=0,
+            sticky="ns"
+        )
+
+        side.grid_propagate(False)
+
+        ctk.CTkLabel(
+            side,
+            text="Greenie Beanie",
+            font=font(22, "bold"),
+            text_color="#FFFFFF"
+        ).pack(
+            anchor="w",
+            padx=24,
+            pady=(32, 28)
+        )
+
+       
+        self.pages = {
+            "Overview": self.build_overview,
+            "Kitchen": self.build_kitchen,
+            "Recycling": self.build_recycling,
+            "Energy and water": self.build_utilities,
+        }
+
+       
+        page_icons = {
+            "Overview": "💫",
+            "Kitchen": "🫕",
+            "Recycling": "♻️",
+            "Energy and water": "💧",
+        }
+
+        self.nav = {}
+
+        for name in self.pages:
+
+            b = ctk.CTkButton(
+                side,
+
+                text=f"{page_icons[name]}  {name}",
+
+                anchor="w",
+                height=42,
+                corner_radius=10,
+
+                font=font(15),
+
+                fg_color="transparent",
+                hover_color=PAL["side_active"],
+
+                text_color=PAL["side_text"],
+
+                command=lambda n=name: self.show(n)
+            )
+
+            b.pack(
+                fill="x",
+                padx=14,
+                pady=3
+            )
+
+            self.nav[name] = b
+
+    
+
+        self.main = ctk.CTkFrame(
+            self,
+            fg_color="transparent"
+        )
+
+        self.main.grid(
+            row=0,
+            column=1,
+            sticky="nsew"
+        )
+
+        self.show("Overview")
+
+
+
+    def show(self, name):
+
+        self.current = name
+
+        for n, b in self.nav.items():
+
+            b.configure(
+                fg_color=(
+                    PAL["side_active"]
+                    if n == name
+                    else "transparent"
+                ),
+
+                text_color=(
+                    "#FFFFFF"
+                    if n == name
+                    else PAL["side_text"]
+                )
+            )
+
+        for w in self.main.winfo_children():
+            w.destroy()
+
+        self.pages[name]()
+
+
+  
+
+    def header(self, title, subtitle=""):
+
+        frame = ctk.CTkFrame(
+            self.main,
+            fg_color="transparent"
+        )
+
+        frame.pack(
+            fill="x",
+            padx=24,
+            pady=(24, 16)
+        )
+
+        ctk.CTkLabel(
+            frame,
+            text=title,
+            font=font(28, "bold"),
+            text_color=PAL["ink"]
+        ).pack(
+            anchor="w"
+        )
+
+        if subtitle:
+
+            ctk.CTkLabel(
+                frame,
+                text=subtitle,
+                font=font(14),
+                text_color=PAL["muted"]
+            ).pack(
+                anchor="w",
+                pady=(4, 0)
+            )
+
+
+    
+
+    def stat(
+        self,
+        parent,
+        column,
+        title,
+        value,
+        subtitle,
+        accent
+    ):
+
+        box = card(parent)
+
+        box.grid(
+            row=0,
+            column=column,
+            padx=7,
+            sticky="nsew"
+        )
+
+        ctk.CTkLabel(
+            box,
+            text=title,
+            font=font(13),
+            text_color=PAL["muted"]
+        ).pack(
+            anchor="w",
+            padx=18,
+            pady=(16, 3)
+        )
+
+        ctk.CTkLabel(
+            box,
+            text=value,
+            font=font(25, "bold"),
+            text_color=accent
+        ).pack(
+            anchor="w",
+            padx=18
+        )
+
+        ctk.CTkLabel(
+            box,
+            text=subtitle,
+            font=font(12),
+            text_color=PAL["muted"]
+        ).pack(
+            anchor="w",
+            padx=18,
+            pady=(3, 16)
+        )
+
+
+   
+    def build_overview(self):
+
+        hour = dt.datetime.now().hour
+
+        if hour < 12:
+            greet = "Good morning"
+        elif hour < 18:
+            greet = "Good afternoon"
+        else:
+            greet = "Good evening"
+
+        self.header(
+            greet,
+            "Here is where your home stands today."
+        )
+
+        food = self.data["food"]
+
+        soon = [
+            f
+            for f in food
+            if days_left(f["expires"]) <= 3
+        ]
+
+        done = (
+            self.data["eaten"]
+            + self.data["wasted"]
+        )
+
+        if done:
+            rate = f"{round(100 * self.data['eaten'] / done)}%"
+        else:
+            rate = "None yet"
+
+        elec = self.latest("Electricity")
+        water = self.latest("Water")
+
+        row = ctk.CTkFrame(
+            self.main,
+            fg_color="transparent"
+        )
+
+        row.pack(
+            fill="x",
+            padx=24
+        )
+
+        for i in range(3):
+            row.grid_columnconfigure(
+                i,
+                weight=1,
+                uniform="stats"
+            )
+
+        self.stat(
+            row,
+            0,
+            "Food saved",
+            str(self.data["eaten"]),
+            "items rescued",
+            PAL["food"]
+        )
+
+        self.stat(
+            row,
+            1,
+            "Food rescue rate",
+            rate,
+            "of completed food",
+            PAL["side"]
+        )
+
+        self.stat(
+            row,
+            2,
+            "Expiring soon",
+            str(len(soon)),
+            "within 3 days",
+            PAL["soon"]
+        )
+
+       
+        goal_card = card(self.main)
+
+        goal_card.pack(
+            fill="x",
+            padx=24,
+            pady=16
+        )
+
+        ctk.CTkLabel(
+            goal_card,
+            text="🌱 Food Rescue Goal",
+            font=font(18, "bold"),
+            text_color=PAL["ink"]
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(15, 3)
+        )
+
+        target = self.data["goals"]["food_target"]
+        progress = self.data["eaten"]
+
+        ctk.CTkLabel(
+            goal_card,
+            text=f"{progress} / {target} foods saved",
+            font=font(14),
+            text_color=PAL["muted"]
+        ).pack(
+            anchor="w",
+            padx=20
+        )
+
+        streak = self.get_streak()
+
+        ctk.CTkLabel(
+            goal_card,
+            text=f"🔥 {streak} day streak",
+            font=font(14, "bold"),
+            text_color=PAL["side"]
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(4, 8)
+        )
+
+        if target > 0:
+            goal_percent = min(
+                progress / target,
+                1
+            )
+        else:
+            goal_percent = 0
+
+        bar = ctk.CTkProgressBar(
+            goal_card,
+            width=400,
+            progress_color=PAL["food"]
+        )
+
+        bar.pack(
+            fill="x",
+            padx=20,
+            pady=15
+        )
+
+        bar.set(goal_percent)
+
+        ctk.CTkButton(
+            goal_card,
+            text="I did an eco action! 🌱",
+            command=self.complete_action,
+            fg_color=PAL["food"],
+            hover_color=PAL["side_active"],
+            corner_radius=10,
+            height=36
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(0, 15)
+        )
+
+
+        box = card(self.main)
+
+        box.pack(
+            fill="both",
+            expand=True,
+            padx=24,
+            pady=(0, 24)
+        )
+
+        ctk.CTkLabel(
+            box,
+            text="🫕 Kitchen watch",
+            font=font(18, "bold"),
+            text_color=PAL["ink"]
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(18, 10)
+        )
+
+        if soon:
+
+            for item in soon[:5]:
+
+                remaining = days_left(
+                    item["expires"]
+                )
+
+                row = ctk.CTkFrame(
+                    box,
+                    fg_color="transparent"
+                )
+
+                row.pack(
+                    fill="x",
+                    padx=20,
+                    pady=4
+                )
+
+                ctk.CTkLabel(
+                    row,
+                    text=item["name"],
+                    font=font(14, "bold"),
+                    text_color=PAL["ink"]
+                ).pack(
+                    side="left"
+                )
+
+                ctk.CTkLabel(
+                    row,
+                    text=expiry_text(remaining),
+                    font=font(13),
+                    text_color=PAL["soon"]
+                ).pack(
+                    side="right"
+                )
+
+        else:
+
+            ctk.CTkLabel(
+                box,
+                text="✨ Nothing is about to expire!",
+                font=font(14),
+                text_color=PAL["muted"]
+            ).pack(
+                anchor="w",
+                padx=20,
+                pady=15
+            )
+
+
+
+    def build_kitchen(self):
+
+        self.header(
+            "🫕 Kitchen",
+            "Keep track of food before it becomes food waste."
+        )
+
+       
+
+        add_card = card(self.main)
+
+        add_card.pack(
+            fill="x",
+            padx=24,
+            pady=(0, 16)
+        )
+
+        ctk.CTkLabel(
+            add_card,
+            text="Add food",
+            font=font(18, "bold"),
+            text_color=PAL["ink"]
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(18, 10)
+        )
+
+        name_entry = ctk.CTkEntry(
+            add_card,
+            placeholder_text="Food name",
+            height=38
+        )
+
+        name_entry.pack(
+            fill="x",
+            padx=20,
+            pady=5
+        )
+
+        date_entry = ctk.CTkEntry(
+            add_card,
+            placeholder_text="Expiry date: YYYY-MM-DD",
+            height=38
+        )
+
+        date_entry.pack(
+            fill="x",
+            padx=20,
+            pady=5
+        )
+
+        message = ctk.CTkLabel(
+            add_card,
+            text="",
+            font=font(12),
+            text_color=PAL["bad"]
+        )
+
+        message.pack(
+            anchor="w",
+            padx=20
+        )
+
+        ctk.CTkButton(
+            add_card,
+            text="Add food 🍓",
+            fg_color=PAL["food"],
+            hover_color=PAL["side_active"],
+            command=lambda: self.add_food(
+                name_entry,
+                date_entry,
+                message
+            )
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(8, 18)
+        )
+
+       
+        list_card = card(self.main)
+
+        list_card.pack(
+            fill="both",
+            expand=True,
+            padx=24,
+            pady=(0, 24)
+        )
+
+        ctk.CTkLabel(
+            list_card,
+            text="Your food",
+            font=font(18, "bold"),
+            text_color=PAL["ink"]
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(18, 10)
+        )
+
+        if not self.data["food"]:
+
+            ctk.CTkLabel(
+                list_card,
+                text="No food added yet 🌱",
+                font=font(14),
+                text_color=PAL["muted"]
+            ).pack(
+                anchor="w",
+                padx=20,
+                pady=20
+            )
+
+            return
+
+        for item in self.data["food"]:
+
+            remaining = days_left(
+                item["expires"]
+            )
+
+            item_row = ctk.CTkFrame(
+                list_card,
+                fg_color=PAL["bg"],
+                corner_radius=12
+            )
+
+            item_row.pack(
+                fill="x",
+                padx=20,
+                pady=5
+            )
+
+            info = ctk.CTkFrame(
+                item_row,
+                fg_color="transparent"
+            )
+
+            info.pack(
+                side="left",
+                padx=14,
+                pady=10
+            )
+
+            ctk.CTkLabel(
+                info,
+                text=item["name"],
+                font=font(14, "bold"),
+                text_color=PAL["ink"]
+            ).pack(
+                anchor="w"
+            )
+
+            ctk.CTkLabel(
+                info,
+                text=expiry_text(remaining),
+                font=font(12),
+                text_color=(
+                    PAL["bad"]
+                    if remaining <= 0
+                    else PAL["soon"]
+                    if remaining <= 3
+                    else PAL["muted"]
+                )
+            ).pack(
+                anchor="w"
+            )
+
+            buttons = ctk.CTkFrame(
+                item_row,
+                fg_color="transparent"
+            )
+
+            buttons.pack(
+                side="right",
+                padx=10
+            )
+
+            ctk.CTkButton(
+                buttons,
+                text="Used ✓",
+                width=70,
+                height=30,
+                fg_color=PAL["food"],
+                hover_color=PAL["side_active"],
+                command=lambda i=item: self.resolve_food(
+                    i,
+                    True
+                )
+            ).pack(
+                side="left",
+                padx=3
+            )
+
+            ctk.CTkButton(
+                buttons,
+                text="Wasted",
+                width=70,
+                height=30,
+                fg_color=PAL["neutral"],
+                hover_color=PAL["bad"],
+                command=lambda i=item: self.resolve_food(
+                    i,
+                    False
+                )
+            ).pack(
+                side="left",
+                padx=3
+            )
+
+
+
+    def add_food(
+        self,
+        name_entry,
+        date_entry,
+        message
+    ):
+
+        name = name_entry.get().strip()
+        date_text = date_entry.get().strip()
+
+        if not name:
+
+            message.configure(
+                text="Please enter a food name."
+            )
+
+            return
+
+        try:
+
+            d = dt.date.fromisoformat(
+                date_text
+            )
+
+        except ValueError:
+
+            message.configure(
+                text="Use the format YYYY-MM-DD."
+            )
+
+            return
+
+        self.data["food"].append(
+            {
+                "name": name,
+                "expires": d.isoformat()
+            }
+        )
+
+        save(self.data)
+
+        self.show("Kitchen")
+
+
+   
+
+    def resolve_food(
+        self,
+        item,
+        eaten
+    ):
+
+        self.data["food"].remove(item)
+
+        if eaten:
+
+            self.data["eaten"] += 1
+
+        else:
+
+            self.data["wasted"] += 1
+
+        save(self.data)
+
+        self.show("Kitchen")
+
+
+
+    def build_recycling(self):
+
+        self.header(
+            "♻️ Recycling",
+            "Not sure where something belongs? Search for it."
+        )
+
+        search_card = card(self.main)
+
+        search_card.pack(
+            fill="x",
+            padx=24,
+            pady=(0, 16)
+        )
+
+        ctk.CTkLabel(
+            search_card,
+            text="What are you recycling?",
+            font=font(18, "bold"),
+            text_color=PAL["ink"]
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(18, 10)
+        )
+
+        entry = ctk.CTkEntry(
+            search_card,
+            placeholder_text="e.g. plastic bottle",
+            height=40
+        )
+
+        entry.pack(
+            fill="x",
+            padx=20,
+            pady=5
+        )
+
+        result = ctk.CTkLabel(
+            search_card,
+            text="",
+            font=font(15, "bold"),
+            text_color=PAL["ink"],
+            wraplength=700
+        )
+
+        result.pack(
+            anchor="w",
+            padx=20,
+            pady=12
+        )
+
+        def search():
+
+            query = entry.get().strip().lower()
+
+            if not query:
+
+                result.configure(
+                    text="Type an item to search."
+                )
+
+                return
+
+            answer = RULES.get(
+                query,
+                "♻️ Check your local recycling rules for this item."
+            )
+
+            result.configure(
+                text=answer
+            )
+
+        ctk.CTkButton(
+            search_card,
+            text="Check ♻️",
+            command=search,
+            fg_color=PAL["side"],
+            hover_color=PAL["side_active"]
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(0, 18)
+        )
+
+        info = card(self.main)
+
+        info.pack(
+            fill="both",
+            expand=True,
+            padx=24,
+            pady=(0, 24)
+        )
+
+        ctk.CTkLabel(
+            info,
+            text="Quick guide",
+            font=font(18, "bold"),
+            text_color=PAL["ink"]
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(18, 10)
+        )
+
+        for category in [
+            "Paper recycling",
+            "Plastic recycling",
+            "Glass recycling",
+            "Metal recycling",
+            "Food waste / compost",
+        ]:
+
+            ctk.CTkLabel(
+                info,
+                text=f"• {category}",
+                font=font(14),
+                text_color=PAL["muted"]
+            ).pack(
+                anchor="w",
+                padx=20,
+                pady=3
+            )
+
+
+    def build_utilities(self):
+
+        self.header(
+            "💧 Energy and Water",
+            "Keep track of your household resource usage."
+        )
+
+        input_card = card(self.main)
+
+        input_card.pack(
+            fill="x",
+            padx=24,
+            pady=(0, 16)
+        )
+
+        ctk.CTkLabel(
+            input_card,
+            text="Add a reading",
+            font=font(18, "bold"),
+            text_color=PAL["ink"]
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(18, 10)
+        )
+
+        kind_var = tk.StringVar(
+            value="Electricity"
+        )
+
+        dropdown = ctk.CTkOptionMenu(
+            input_card,
+            values=[
+                "Electricity",
+                "Water"
+            ],
+            variable=kind_var,
+            height=38
+        )
+
+        dropdown.pack(
+            fill="x",
+            padx=20,
+            pady=5
+        )
+
+        value_entry = ctk.CTkEntry(
+            input_card,
+            placeholder_text="Usage value",
+            height=38
+        )
+
+        value_entry.pack(
+            fill="x",
+            padx=20,
+            pady=5
+        )
+
+        unit_label = ctk.CTkLabel(
+            input_card,
+            text="",
+            font=font(12),
+            text_color=PAL["muted"]
+        )
+
+        unit_label.pack(
+            anchor="w",
+            padx=20
+        )
+
+        def update_unit(*args):
+
+            if kind_var.get() == "Electricity":
+                unit_label.configure(
+                    text="Example: kWh"
+                )
+            else:
+                unit_label.configure(
+                    text="Example: litres"
+                )
+
+        kind_var.trace_add(
+            "write",
+            update_unit
+        )
+
+        update_unit()
+
+        message = ctk.CTkLabel(
+            input_card,
+            text="",
+            font=font(12),
+            text_color=PAL["bad"]
+        )
+
+        message.pack(
+            anchor="w",
+            padx=20
+        )
+
+        def add_reading():
+
+            kind = kind_var.get()
+
+            try:
+                value = float(
+                    value_entry.get()
+                )
+
+                if value < 0:
+                    raise ValueError
+
+            except ValueError:
+
+                message.configure(
+                    text="Enter a valid positive number."
+                )
+
+                return
+
+            self.data["usage"].append(
+                {
+                    "kind": kind,
+                    "value": value,
+                    "date": dt.date.today().isoformat()
+                }
+            )
+
+            save(self.data)
+
+            self.show("Energy and water")
+
+        ctk.CTkButton(
+            input_card,
+            text="Save reading 💾",
+            command=add_reading,
+            fg_color=PAL["side"],
+            hover_color=PAL["side_active"]
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(8, 18)
+        )
+
+
+        readings = card(self.main)
+
+        readings.pack(
+            fill="both",
+            expand=True,
+            padx=24,
+            pady=(0, 24)
+        )
+
+        ctk.CTkLabel(
+            readings,
+            text="Latest readings",
+            font=font(18, "bold"),
+            text_color=PAL["ink"]
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(18, 10)
+        )
+
+        electricity = self.latest(
+            "Electricity"
+        )
+
+        water = self.latest(
+            "Water"
+        )
+
+        if electricity is not None:
+
+            ctk.CTkLabel(
+                readings,
+                text=f"⚡ Electricity: {electricity}",
+                font=font(15),
+                text_color=PAL["ink"]
+            ).pack(
+                anchor="w",
+                padx=20,
+                pady=5
+            )
+
+        else:
+
+            ctk.CTkLabel(
+                readings,
+                text="⚡ Electricity: No reading yet",
+                font=font(15),
+                text_color=PAL["muted"]
+            ).pack(
+                anchor="w",
+                padx=20,
+                pady=5
+            )
+
+        if water is not None:
+
+            ctk.CTkLabel(
+                readings,
+                text=f"💧 Water: {water}",
+                font=font(15),
+                text_color=PAL["ink"]
+            ).pack(
+                anchor="w",
+                padx=20,
+                pady=5
+            )
+
+        else:
+
+            ctk.CTkLabel(
+                readings,
+                text="💧 Water: No reading yet",
+                font=font(15),
+                text_color=PAL["muted"]
+            ).pack(
+                anchor="w",
+                padx=20,
+                pady=5
+            )
+
+
+
+    def latest(self, kind):
+
+        values = [
+            x
+            for x in self.data["usage"]
+            if x["kind"] == kind
+        ]
+
+        if not values:
+            return None
+
+        return values[-1]["value"]
+
+
+
+    def complete_action(self):
+
+        today = dt.date.today().isoformat()
+
+        if today not in self.data["eco_actions"]:
+
+            self.data["eco_actions"].append(
+                today
+            )
+
+            save(self.data)
+
+        self.show("Overview")
+
+
+    def get_streak(self):
+
+        dates = set()
+
+        for d in self.data["eco_actions"]:
+
+            try:
+
+                dates.add(
+                    dt.date.fromisoformat(d)
+                )
+
+            except ValueError:
+
+                pass
+
+        streak = 0
+
+        day = dt.date.today()
+
+        while day in dates:
+
+            streak += 1
+
+            day -= dt.timedelta(days=1)
+
+        return streak
+
+
+
+if __name__ == "__main__":
+    App().mainloop()
